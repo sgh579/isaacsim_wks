@@ -1,3 +1,4 @@
+# Run press and record f-d
 from isaacsim import SimulationApp
 import os
 import csv
@@ -14,15 +15,20 @@ from pxr import UsdGeom, Gf, PhysxSchema
 import omni.kit.commands
 import omni.usd
 import numpy as np
+from pxr import Gf, UsdLux
 
 # 2. 初始化世界
 world = World(stage_units_in_meters=1.0)
 stage = omni.usd.get_context().get_stage()
+UsdLux.DomeLight.Define(stage, "/World/DomeLight").CreateIntensityAttr(1200.0)
+UsdLux.DistantLight.Define(stage, "/World/DistantLight").CreateIntensityAttr(2000.0)
+
 
 scene = world.get_physics_context()
 scene.enable_gpu_dynamics(True)
 # scene.set_solver_position_iteration_count(64) # 针对高精度变形强制增加 # invalid
 scene.set_broadphase_type("GPU")
+
 
 def create_deformable_box_official_style(target_path="/World/Sponge"):
     _, tmp_path = omni.kit.commands.execute("CreateMeshPrim", prim_type="Cube", select_new_prim=False)
@@ -34,29 +40,31 @@ def create_deformable_box_official_style(target_path="/World/Sponge"):
 
     deformableUtils.add_physx_deformable_body(
         stage, mesh.GetPath(),
-        collision_simplification=False,
-        simulation_hexahedral_resolution=100, 
-        self_collision=True,
+        collision_simplification=True,
+        simulation_hexahedral_resolution=50, 
+        self_collision=False,
     )
 
     deformableUtils.add_deformable_body_material(
         stage, target_path + "Material",
-        youngs_modulus=30000.0, poissons_ratio=0.45,
+        youngs_modulus=20000.0, poissons_ratio=0.45,
         damping_scale=0.0, dynamic_friction=0.5,
     )
     physicsUtils.add_physics_material_to_prim(stage, mesh.GetPrim(), target_path + "Material")
     return mesh
 
 # 3. 执行场景搭建
-# create_deformable_box_official_style()
+create_deformable_box_official_style()
 world.scene.add_default_ground_plane()
-sensor = SpringForceSensor("/World/Sensor")
 
 # --- 运动参数配置 ---
-start_z = 2.4    
-end_z = 2.1      
-speed = 0.1      
+start_z = 1.35
+delta_z = 0.2    
+end_z = start_z - delta_z      
+speed = 0.005      
 wait_time = 5.0  # 前 5s 静止
+
+sensor = SpringForceSensor("/World/Sensor", stiffness = 1000.0, t_base = [0.0, 0.0, start_z])
 
 total_distance = abs(start_z - end_z)
 move_duration = total_distance / speed

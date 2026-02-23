@@ -12,6 +12,23 @@ import isaacsim.core.utils.prims as prim_utils
 from isaacsim.sensors.camera import Camera
 from pxr import Gf, UsdLux
 
+# Place objects parameter
+sphere_radius = 0.1
+cube_scale = [0.05, 0.05, 0.1]
+cube_translation = [0.12, -0.12, 0.1]
+
+# Recording parameter
+focal_length = 2
+NUM_FRAMES = 10
+RADIUS = 0.4 
+HEIGHT = 0.4
+BASELINE = 0.06
+TARGET_POINT = np.array([0.0, 0.0, 0.0])
+
+# Output dir
+output_dir = os.path.abspath("./stereo_parallel_recording_4")
+
+
 # Orientation calculation: -Z of lookAt in Isaac Sim 's convention, towards +X in usd's convention.
 def get_rig_orientation(eye_pos, target_pos):
     eye = Gf.Vec3d(*eye_pos.tolist())
@@ -32,7 +49,6 @@ def get_rig_orientation(eye_pos, target_pos):
     return np.array([q.GetReal(), *q.GetImaginary()])
 
 # 2. Initialize paths and folders
-output_dir = os.path.abspath("./stereo_parallel_recording_1")
 left_dir = os.path.join(output_dir, "left")
 right_dir = os.path.join(output_dir, "right")
 os.makedirs(left_dir, exist_ok=True)
@@ -46,9 +62,8 @@ stage = prim_utils.get_current_stage()
 UsdLux.DomeLight.Define(stage, "/World/DomeLight").CreateIntensityAttr(1200.0)
 UsdLux.DistantLight.Define(stage, "/World/DistantLight").CreateIntensityAttr(2000.0)
 
-# Place objects
-prim_utils.create_prim("/World/obj_sphere", "Sphere", translation=(0.0, 0.0, 0.4), attributes={"radius": 0.3})
-prim_utils.create_prim("/World/obj_cube", "Cube", translation=(0.5, -0.5, 0.5), scale=(0.1, 0.1, 0.5))
+prim_utils.create_prim("/World/obj_sphere", "Sphere", translation=(0.0, 0.0, sphere_radius), attributes={"radius": sphere_radius})
+prim_utils.create_prim("/World/obj_cube", "Cube", translation=(cube_translation[0], cube_translation[1], cube_translation[2]), scale=(cube_scale[0], cube_scale[1], cube_scale[2]))
 
 my_world.reset()
 
@@ -57,16 +72,29 @@ cam_l = Camera(prim_path="/World/cam_l", resolution=(1280, 720))
 cam_r = Camera(prim_path="/World/cam_r", resolution=(1280, 720))
 cam_l.initialize()
 cam_r.initialize()
+cam_l.set_focal_length(focal_length) # f = 20mm
+cam_r.set_focal_length(focal_length) # f = 20mm
+cam_l.set_clipping_range(near_distance=0.01, far_distance=10000.0)
+cam_r.set_clipping_range(near_distance=0.01, far_distance=10000.0)
 
 # Get and save intrinsics file
 intrinsic_l = cam_l.get_intrinsics_matrix()
 intrinsic_r = cam_r.get_intrinsics_matrix()
 
+
 with open(os.path.join(output_dir, "camera_parameters.txt"), "w") as f:
-    f.write("Stereo Camera Intrinsics\n")
+    f.write("Stereo Camera Intrinsics in pixel\n")
     f.write("========================\n\n")
     f.write(f"Left Camera Intrinsics:\n{intrinsic_l}\n\n")
-    f.write(f"Right Camera Intrinsics:\n{intrinsic_r}\n")
+    f.write(f"Right Camera Intrinsics:\n{intrinsic_r}\n\n")
+    f.write(f"**** replace both the focal length with {focal_length * 10} in the unit of mm. ****\n")
+    f.write("========================\n\n")
+    f.write(f"sphere with radius of {sphere_radius} meter is placed on the origin.\n")
+    f.write(f"cube in size of {[i * 2 for i in cube_scale]}(meter) is placed at {cube_translation}\n")
+    f.write(f"camera is in a orbit with the radius = {RADIUS} meter and height = {HEIGHT} meter, pointing at the origin.\n")
+    f.write(f"baseline = {BASELINE} meter.\n")
+    f.write("=========== Eazy Copy =============\n\n")
+    im_in_list = [[j for j in i] for i in intrinsic_l]
 
 # 5. Prepare CSV file
 csv_path = os.path.join(output_dir, "camera_poses.csv")
@@ -76,12 +104,6 @@ csv_writer = csv.writer(csv_file)
 csv_writer.writerow(["frame", "time", "pos_l_x", "pos_l_y", "pos_l_z", "quat_l_w", "quat_l_x", "quat_l_y", "quat_l_z",
                      "pos_r_x", "pos_r_y", "pos_r_z", "quat_r_w", "quat_r_x", "quat_r_y", "quat_r_z"])
 
-# 6. Recording loop
-NUM_FRAMES = 150
-RADIUS = 3.5 
-HEIGHT = 1.2
-BASELINE = 0.06
-TARGET_POINT = np.array([0.0, 0.0, 0.3])
 
 print(">>> Preheating renderer...")
 for _ in range(30):
