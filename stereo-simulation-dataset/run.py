@@ -4,7 +4,6 @@ import numpy as np
 import csv
 from PIL import Image
 
-# 1. Start App
 simulation_app = SimulationApp({"headless": False})
 
 from isaacsim.core.api import World
